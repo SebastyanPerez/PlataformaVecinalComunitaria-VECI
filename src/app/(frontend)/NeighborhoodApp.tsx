@@ -489,7 +489,19 @@ export function NeighborhoodApp({ listings }: { listings: ListingView[] }) {
       <section className="app-main">
         <header className="topbar">
           <div className="brand-lockup topbar__brand">
-            <img src="/images/veci-logo.jpg" alt="VECI" className="brand-logo-img" />
+            <img
+              src="/images/veci-logo.jpg"
+              alt="VECI"
+              className="brand-logo-img"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+                const fallback = e.currentTarget.parentElement?.querySelector('.brand-mark-fallback')
+                if (fallback) (fallback as HTMLElement).style.display = 'grid'
+              }}
+            />
+            <span className="brand-mark brand-mark-fallback" style={{ display: 'none' }}>
+              V
+            </span>
             <span>VECI</span>
           </div>
           <button
