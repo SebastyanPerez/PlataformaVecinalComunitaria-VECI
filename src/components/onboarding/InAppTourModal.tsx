@@ -1,129 +1,186 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   CheckCircle2,
-  HandHeart,
-  HelpCircle,
   Layers,
   MapPin,
   PlusCircle,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Volume2,
   X,
-  Wrench,
-  BookOpen,
-  ArrowRight,
-  ArrowLeft,
 } from 'lucide-react'
 
-interface TourStep {
+interface SpotlightStep {
   badge: string
   title: string
-  summary: string
-  detail: string
-  icon: typeof MapPin
+  description: string
+  tip: string
+  targetSelector: string | (() => HTMLElement | null)
   color: string
-  bgLight: string
-  accentBorder: string
-  actionLabel?: string
+  preferredPlacement?: 'top' | 'bottom' | 'left' | 'right' | 'center'
 }
 
-const TOUR_STEPS: TourStep[] = [
+const SPOTLIGHT_STEPS: SpotlightStep[] = [
   {
-    badge: 'Paso 1 de 5 · ¿Qué es VECI?',
-    title: 'Tu barrio solidario a menos de 10 cuadras',
-    summary: 'Encuentra oficios recomendados, pide herramientas prestadas y apoya a tus vecinos sin gastar de más.',
-    detail:
-      'VECI conecta a las personas que viven cerca de ti para resolver necesidades cotidianas con costos mínimos y sin transporte largo.',
-    icon: MapPin,
-    color: '#0f766e',
-    bgLight: '#f0fdfa',
-    accentBorder: '#99f6e4',
-  },
-  {
-    badge: 'Paso 2 de 5 · El Mapa y los Colores',
-    title: 'Cada color representa un tipo de apoyo vecinal',
-    summary: 'Aprende a reconocer rápidamente qué ofrece cada gota en tu mapa:',
-    detail: 'Guía rápida de colores para que encuentres lo que buscas al instante:',
-    icon: Layers,
-    color: '#2563eb',
-    bgLight: '#eff6ff',
-    accentBorder: '#bfdbfe',
-  },
-  {
-    badge: 'Paso 3 de 5 · Confianza y Visto Bueno',
-    title: 'Toca cualquier pin para conocer al vecino',
-    summary: 'Al tocar un pin verás la foto, precio exacto (ej. S/ 30 o Sin costo) y la recomendación vecinal.',
-    detail:
-      'El sello verde "Visto Bueno Vecinal" te indica que otros vecinos de la misma junta o calle ya verificaron y avalaron a esa persona.',
-    icon: ShieldCheck,
-    color: '#059669',
-    bgLight: '#ecfdf5',
-    accentBorder: '#a7f3d0',
-  },
-  {
-    badge: 'Paso 4 de 5 · Publicar en 3 clics',
-    title: '¿Tienes una herramienta o un oficio? Publica fácil',
-    summary: 'El botón "+ Publicar" te permite ofrecer un servicio, prestar algo o pedir ayuda en solo 3 toques.',
-    detail:
-      'No hay formularios complicados. Elige qué modalidad es, escribe el título y tu publicación aparecerá de inmediato en el mapa de tus vecinos.',
-    icon: PlusCircle,
-    color: '#7c3aed',
-    bgLight: '#f5f3ff',
-    accentBorder: '#ddd6fe',
-  },
-  {
-    badge: 'Paso 5 de 5 · Modo de Emergencia',
-    title: 'Botón SOS para sismos o cortes de servicios',
-    summary: 'El botón rojo superior activa el Tablero de Emergencia y las llamadas directas sin gastar megas.',
-    detail:
-      'Encuentra brigadas vecinales de primeros auxilios, electricistas de guardia para corte de llaves, y los números de Bomberos 116, Policía 105 y SAMU 106 listos para marcar.',
-    icon: ShieldAlert,
-    color: '#dc2626',
-    bgLight: '#fef2f2',
-    accentBorder: '#fecaca',
-  },
-]
+    badge: 'Paso 1 de 4 · El Mapa Vivo',
+    title: 'Soluciones y oficios cerca de ti',
+    description:
+      'Cada gota de color en el mapa representa a un vecino a menos de 10 cuadras ofreciendo servicios, prestando herramientas o coordinando favores.',
+    tip: 'Toca cualquier pin para ver el precio exacto (S/ o Sin costo) y su descripción.',
+    targetSelector: () => {
+      if (typeof window === 'undefined') return null
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const isMobile = vw <= 900
 
-const COLOR_GUIDE = [
-  {
-    name: 'Oficios y Servicios',
-    color: '#2563eb',
-    bg: '#dbeafe',
-    example: 'Gasfiteros, electricistas, costura',
+      // En móvil, la hoja inferior cubre los últimos ~250px del mapa
+      const topLimit = 75
+      const bottomLimit = isMobile ? vh - 260 : vh - 50
+      const rightLimit = isMobile ? vw - 15 : vw - 430
+
+      // Buscar todos los pines en el DOM
+      const pins = Array.from(
+        document.querySelectorAll('.leaflet-marker-icon, .teardrop-pin')
+      ) as HTMLElement[]
+
+      let bestPin: HTMLElement | null = null
+      let bestDist = Infinity
+      const targetCenterX = isMobile ? vw / 2 : rightLimit / 2
+      const targetCenterY = (topLimit + bottomLimit) / 2
+
+      for (const pin of pins) {
+        const r = pin.getBoundingClientRect()
+        if (
+          r.width > 0 &&
+          r.height > 0 &&
+          r.top >= topLimit &&
+          r.bottom <= bottomLimit &&
+          r.left >= 10 &&
+          r.right <= rightLimit
+        ) {
+          const pinCenterX = r.left + r.width / 2
+          const pinCenterY = r.top + r.height / 2
+          const dist = Math.hypot(pinCenterX - targetCenterX, pinCenterY - targetCenterY)
+          if (dist < bestDist) {
+            bestDist = dist
+            bestPin = pin
+          }
+        }
+      }
+
+      if (bestPin) return bestPin
+
+      // Fallback: filtros rápidos de mapa o el canvas
+      return (
+        (document.querySelector('.map-quick-filters') as HTMLElement) ||
+        (document.querySelector('.map-canvas') as HTMLElement)
+      )
+    },
+    color: '#0f766e',
+    preferredPlacement: 'bottom',
   },
   {
-    name: 'Préstamo de Herramientas',
-    color: '#7c3aed',
-    bg: '#ede9fe',
-    example: 'Taladros, escaleras sin costo (S/ 0)',
-  },
-  {
-    name: 'Banco de Tiempo',
+    badge: 'Paso 2 de 4 · Confianza Vecinal',
+    title: 'Fichas con Visto Bueno Vecinal',
+    description:
+      'En la lista de tu zona puedes explorar todas las soluciones con recomendaciones reales y aval de vecinos de tu mismo barrio.',
+    tip: 'El sello verde "Visto Bueno Vecinal" garantiza identidad verificada y recomendación comprobada.',
+    targetSelector: () => {
+      if (typeof window === 'undefined') return null
+      const isMobile = window.innerWidth <= 900
+
+      if (isMobile) {
+        // En móvil: primera tarjeta de la lista inferior
+        const card = document.querySelector('.discovery-sheet .listing-strip .listing-card') as HTMLElement
+        if (card) {
+          const r = card.getBoundingClientRect()
+          if (r.width > 30 && r.height > 30) return card
+        }
+        return (
+          (document.querySelector('.discovery-sheet .sheet-heading') as HTMLElement) ||
+          (document.querySelector('.discovery-sheet') as HTMLElement)
+        )
+      }
+
+      // En escritorio: primera tarjeta de la barra lateral
+      return (
+        (document.querySelector('.discovery-sheet .listing-card') as HTMLElement) ||
+        (document.querySelector('.discovery-sheet .sheet-heading') as HTMLElement) ||
+        (document.querySelector('.discovery-sheet') as HTMLElement)
+      )
+    },
     color: '#059669',
-    bg: '#d1fae5',
-    example: 'Clases, asesorías (1 h por 1 h)',
+    preferredPlacement: 'left',
   },
   {
-    name: 'Trueque Solidario',
-    color: '#ea580c',
-    bg: '#ffedd5',
-    example: 'Intercambio de artículos del hogar',
+    badge: 'Paso 3 de 4 · Publicar en 3 clics',
+    title: 'Presta o pide ayuda sin trámites',
+    description:
+      'Toca "+ Publicar" para compartir una herramienta guardada, ofrecer un oficio o solicitar un favor solidario en solo 3 toques.',
+    tip: 'No hay formularios largos. Tu publicación aparece visible en el mapa en 1 segundo.',
+    targetSelector: () => {
+      if (typeof window === 'undefined') return null
+      const isMobile = window.innerWidth <= 900
+
+      if (isMobile) {
+        // En móvil: el botón flotante "+ Publicar" de la barra inferior (.bottom-nav)
+        const mobilePublish =
+          (document.querySelector('.bottom-nav button.is-publish') as HTMLElement) ||
+          (document.querySelector('.bottom-nav .is-publish') as HTMLElement)
+        if (mobilePublish) {
+          const r = mobilePublish.getBoundingClientRect()
+          if (r.width > 0 && r.height > 0) return mobilePublish
+        }
+        // Fallback al 3er botón de la barra inferior
+        const navButtons = Array.from(document.querySelectorAll('.bottom-nav button')) as HTMLElement[]
+        if (navButtons[2]) return navButtons[2]
+      } else {
+        // En escritorio: el botón del menú lateral (.desktop-rail)
+        const railButtons = Array.from(document.querySelectorAll('.desktop-rail button')) as HTMLElement[]
+        const publishRailBtn = railButtons.find((b) => b.textContent?.toLowerCase().includes('publicar'))
+        if (publishRailBtn) return publishRailBtn
+        if (railButtons[2]) return railButtons[2]
+      }
+
+      // Fallback genérico: cualquier botón visible con texto 'publicar'
+      const allButtons = Array.from(document.querySelectorAll('button')) as HTMLElement[]
+      const visiblePublish = allButtons.find((b) => {
+        const text = b.textContent?.toLowerCase() || ''
+        if (!text.includes('publicar')) return false
+        const r = b.getBoundingClientRect()
+        return r.width > 0 && r.height > 0 && r.top < window.innerHeight && r.bottom > 0
+      })
+      if (visiblePublish) return visiblePublish
+
+      return (
+        (document.querySelector('.bottom-nav') as HTMLElement) ||
+        (document.querySelector('.desktop-rail') as HTMLElement)
+      )
+    },
+    color: '#7c3aed',
+    preferredPlacement: 'top',
   },
   {
-    name: 'Donaciones y Regalos',
-    color: '#d97706',
-    bg: '#fef3c7',
-    example: 'Libros, ropa infantil gratis',
-  },
-  {
-    name: 'Apoyo y Necesidad',
-    color: '#e11d48',
-    bg: '#ffe4e6',
-    example: 'Compras de mercado a adulto mayor',
+    badge: 'Paso 4 de 4 · Protección Civil',
+    title: 'Modo Emergencia 100% Offline',
+    description:
+      'En caso de sismo, corte de agua o emergencia en el barrio, este botón te conecta con brigadas vecinales y números directos.',
+    tip: 'Acceso inmediato a Bomberos (116), Policía (105) y SAMU (106) sin gastar megas.',
+    targetSelector: () => {
+      if (typeof window === 'undefined') return null
+      return (
+        (document.querySelector('.topbar__actions .emergency-button') as HTMLElement) ||
+        (document.querySelector('.emergency-button') as HTMLElement) ||
+        (document.querySelector('.topbar__actions') as HTMLElement)
+      )
+    },
+    color: '#dc2626',
+    preferredPlacement: 'bottom',
   },
 ]
 
@@ -138,7 +195,107 @@ export function InAppTourModal({
 }) {
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [targetRect, setTargetRect] = useState<{
+    top: number
+    left: number
+    width: number
+    height: number
+  } | null>(null)
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number }>({ top: 120, left: 24 })
+  const overlayRef = useRef<HTMLDivElement>(null)
 
+  const updatePositions = useCallback(() => {
+    if (!isOpen) return
+    const step = SPOTLIGHT_STEPS[currentStep]
+    if (!step) return
+
+    let el: HTMLElement | null = null
+    if (typeof step.targetSelector === 'function') {
+      el = step.targetSelector()
+    } else {
+      el = document.querySelector(step.targetSelector)
+    }
+
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+
+    if (el && typeof el.getBoundingClientRect === 'function') {
+      const rect = el.getBoundingClientRect()
+      // Padding adaptativo según el tipo de elemento
+      const isPublishStep = currentStep === 2
+      const isPinStep = currentStep === 0
+      const pad = isPublishStep ? 6 : isPinStep ? 10 : 8
+
+      const boundLeft = Math.max(4, Math.min(vw - 24, rect.left - pad))
+      const boundTop = Math.max(4, Math.min(vh - 24, rect.top - pad))
+      const boundWidth = Math.max(24, Math.min(vw - boundLeft - 4, rect.width + pad * 2))
+      const boundHeight = Math.max(24, Math.min(vh - boundTop - 4, rect.height + pad * 2))
+
+      setTargetRect({
+        top: boundTop,
+        left: boundLeft,
+        width: boundWidth,
+        height: boundHeight,
+      })
+
+      // Calcular posición del tooltip sin distorsión
+      const tooltipWidth = Math.min(340, vw - 24)
+      const tooltipHeight = 205 // Altura aproximada de la tarjeta
+
+      let tTop = boundTop + boundHeight + 14
+      let tLeft = boundLeft + boundWidth / 2 - tooltipWidth / 2
+
+      if (vw <= 768) {
+        // En móvil:
+        const spaceBelow = vh - (boundTop + boundHeight)
+        const spaceAbove = boundTop
+
+        if (spaceBelow >= tooltipHeight + 16) {
+          // Espacio suficiente abajo (ej. pines del mapa o botón SOS arriba)
+          tTop = boundTop + boundHeight + 14
+        } else if (spaceAbove >= tooltipHeight + 16) {
+          // Espacio suficiente arriba (ej. botón publicar o ficha en bottom sheet)
+          tTop = boundTop - tooltipHeight - 14
+        } else {
+          // Si el elemento ocupa mucho alto, ubicarlo donde haya más aire
+          tTop = spaceAbove > spaceBelow
+            ? Math.max(12, boundTop - tooltipHeight - 10)
+            : Math.min(vh - tooltipHeight - 12, boundTop + boundHeight + 10)
+        }
+        tLeft = Math.max(12, (vw - tooltipWidth) / 2)
+      } else {
+        // En escritorio: según colocación preferida
+        if (step.preferredPlacement === 'left' && boundLeft > tooltipWidth + 24) {
+          tLeft = boundLeft - tooltipWidth - 16
+          tTop = Math.max(70, Math.min(vh - tooltipHeight - 20, boundTop))
+        } else if (step.preferredPlacement === 'right' && (vw - (boundLeft + boundWidth)) > tooltipWidth + 24) {
+          tLeft = boundLeft + boundWidth + 16
+          tTop = Math.max(70, Math.min(vh - tooltipHeight - 20, boundTop))
+        } else if (step.preferredPlacement === 'top' && boundTop > tooltipHeight + 20) {
+          tTop = boundTop - tooltipHeight - 16
+          tLeft = Math.max(16, Math.min(vw - tooltipWidth - 16, boundLeft))
+        } else if (tTop + tooltipHeight > vh - 20) {
+          tTop = Math.max(70, boundTop - tooltipHeight - 16)
+          tLeft = Math.max(16, Math.min(vw - tooltipWidth - 16, tLeft))
+        } else {
+          tLeft = Math.max(16, Math.min(vw - tooltipWidth - 16, tLeft))
+        }
+      }
+
+      tLeft = Math.max(12, Math.min(vw - tooltipWidth - 12, tLeft))
+      tTop = Math.max(12, Math.min(vh - tooltipHeight - 12, tTop))
+      setTooltipPos({ top: tTop, left: tLeft })
+    } else {
+      // Fallback centrado si el elemento aún no está en el DOM
+      setTargetRect(null)
+      setTooltipPos({
+        top: Math.max(60, vh / 2 - 100),
+        left: Math.max(12, (vw - Math.min(340, vw - 24)) / 2),
+      })
+    }
+  }, [isOpen, currentStep])
+
+  // 1. Resetear el paso SOLO cuando el tour se abre
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(initialStep)
@@ -147,10 +304,23 @@ export function InAppTourModal({
     }
   }, [isOpen, initialStep])
 
+  // 2. Actualizar posiciones cuando cambia de paso o redimensiona la pantalla
+  useEffect(() => {
+    if (!isOpen) return
+    updatePositions()
+    const timer = setTimeout(updatePositions, 100)
+    window.addEventListener('resize', updatePositions)
+    window.addEventListener('scroll', updatePositions, true)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', updatePositions)
+      window.removeEventListener('scroll', updatePositions, true)
+    }
+  }, [isOpen, currentStep, updatePositions])
+
   if (!isOpen) return null
 
-  const step = TOUR_STEPS[currentStep] || TOUR_STEPS[0]
-  const Icon = step.icon
+  const step = SPOTLIGHT_STEPS[currentStep] || SPOTLIGHT_STEPS[0]
 
   const handleSpeak = () => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
@@ -162,13 +332,10 @@ export function InAppTourModal({
     }
 
     window.speechSynthesis.cancel()
-    let textToSpeak = `${step.title}. ${step.summary}. ${step.detail}`
-    if (currentStep === 1) {
-      textToSpeak += ' Los colores son: Azul para oficios, Morado para préstamos gratuitos, Verde para banco de tiempo, Naranja para trueques, y Rojo para ayuda solidaria.'
-    }
+    const textToSpeak = `${step.title}. ${step.description}. ${step.tip}`
     const utterance = new SpeechSynthesisUtterance(textToSpeak)
     utterance.lang = 'es-PE'
-    utterance.rate = 0.95 // Slightly slower for clear neighborhood comprehension
+    utterance.rate = 0.95
     utterance.onend = () => setIsSpeaking(false)
     utterance.onerror = () => setIsSpeaking(false)
     setIsSpeaking(true)
@@ -190,7 +357,7 @@ export function InAppTourModal({
   const handleNext = () => {
     window.speechSynthesis?.cancel()
     setIsSpeaking(false)
-    if (currentStep < TOUR_STEPS.length - 1) {
+    if (currentStep < SPOTLIGHT_STEPS.length - 1) {
       setCurrentStep((prev) => prev + 1)
     } else {
       handleClose()
@@ -207,127 +374,127 @@ export function InAppTourModal({
 
   return (
     <div
-      className="tour-overlay"
+      ref={overlayRef}
+      className="spotlight-tour-overlay"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="tour-modal-title"
+      aria-label="Guía interactiva paso a paso de VECI"
     >
-      <div className="tour-modal-card">
-        {/* ENCABEZADO SUPERIOR */}
-        <div className="tour-header" style={{ borderBottomColor: step.accentBorder }}>
-          <div className="tour-badge-pill" style={{ color: step.color, background: step.bgLight }}>
-            <span className="tour-badge-dot" style={{ background: step.color }} />
-            {step.badge}
-          </div>
-          <div className="tour-header-actions">
-            <button
-              type="button"
-              className={`tour-audio-btn ${isSpeaking ? 'is-active' : ''}`}
-              onClick={handleSpeak}
-              title={isSpeaking ? 'Detener voz' : 'Escuchar en voz alta'}
-              aria-label={isSpeaking ? 'Detener narración de voz' : 'Escuchar narración de voz'}
-            >
-              <Volume2 size={16} />
-              <span>{isSpeaking ? 'Pausar' : 'Escuchar'}</span>
-            </button>
-            <button
-              type="button"
-              className="tour-close-btn"
-              onClick={handleClose}
-              aria-label="Cerrar guía y empezar a explorar"
-              title="Cerrar guía"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        {/* CONTENIDO PRINCIPAL */}
-        <div className="tour-body">
+      {/* CAPA DE OSCURECIMIENTO CON RECORTE SUAVE (BOX-SHADOW DINÁMICA) */}
+      {targetRect ? (
+        <div
+          className={`spotlight-focus-box ${currentStep === 2 ? 'is-publish-target' : ''}`}
+          style={{
+            top: `${targetRect.top}px`,
+            left: `${targetRect.left}px`,
+            width: `${targetRect.width}px`,
+            height: `${targetRect.height}px`,
+            borderColor: step.color,
+            borderRadius: currentStep === 2 ? '9999px' : undefined,
+          }}
+        >
+          {/* Baliza pulsante circular/rectángulo */}
           <div
-            className="tour-icon-bubble"
-            style={{ color: step.color, background: step.bgLight, borderColor: step.accentBorder }}
+            className="spotlight-beacon-pulse"
+            style={{
+              borderColor: step.color,
+              borderRadius: currentStep === 2 ? '9999px' : undefined,
+            }}
+          />
+          {/* Indicador animado adaptativo */}
+          <span
+            className={`spotlight-pointer-hand ${targetRect.top < 65 ? 'is-pointing-up' : ''}`}
+            aria-hidden="true"
           >
-            <Icon size={34} strokeWidth={2.2} />
+            {targetRect.top < 65 ? '👆' : '👇'}
+          </span>
+        </div>
+      ) : (
+        <div className="spotlight-backdrop-fallback" />
+      )}
+
+      {/* TARJETA INTERACTIVA FLOTANTE (RESPONSIVE EN WEB Y MÓVIL) */}
+      <div
+        className="spotlight-tooltip-card"
+        style={{
+          top: `${tooltipPos.top}px`,
+          left: `${tooltipPos.left}px`,
+        }}
+      >
+        <div className="spotlight-card-header">
+          <span
+            className="spotlight-step-badge"
+            style={{ color: step.color, background: `${step.color}15`, borderColor: `${step.color}40` }}
+          >
+            {step.badge}
+          </span>
+          <div className="spotlight-header-actions">
+            <button
+              type="button"
+              className={`spotlight-audio-btn ${isSpeaking ? 'is-active' : ''}`}
+              onClick={handleSpeak}
+              title="Escuchar narración de voz"
+              aria-label="Escuchar narración de voz"
+            >
+              <Volume2 size={15} />
+            </button>
+            <button
+              type="button"
+              className="spotlight-close-btn"
+              onClick={handleClose}
+              title="Cerrar tour"
+              aria-label="Cerrar tour"
+            >
+              <X size={16} />
+            </button>
           </div>
-
-          <h2 id="tour-modal-title" className="tour-title">
-            {step.title}
-          </h2>
-
-          <p className="tour-summary">{step.summary}</p>
-
-          {/* CONTENIDO ESPECIAL PARA EL PASO 2: GUÍA DE COLORES */}
-          {currentStep === 1 ? (
-            <div className="tour-color-grid" aria-label="Significado de los colores">
-              {COLOR_GUIDE.map((c) => (
-                <div key={c.name} className="tour-color-item" style={{ background: c.bg }}>
-                  <span className="tour-color-swatch" style={{ background: c.color }} />
-                  <div className="tour-color-info">
-                    <strong style={{ color: c.color }}>{c.name}</strong>
-                    <small>{c.example}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="tour-detail-box" style={{ background: step.bgLight, borderColor: step.accentBorder }}>
-              <p>{step.detail}</p>
-            </div>
-          )}
-
-          {/* PASO 3: DEMOSTRACIÓN DE VISTO BUENO */}
-          {currentStep === 2 && (
-            <div className="tour-trust-demo">
-              <div className="trust-pill-preview">
-                <ShieldCheck size={16} color="#059669" />
-                <span>
-                  <strong>Visto Bueno Vecinal:</strong> Avalado por Carmen Ríos (Centro Cívico)
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* PIE CON PUNTOS DE PROGRESO Y BOTONES */}
-        <div className="tour-footer">
-          <div className="tour-dots" aria-label="Progreso del tour">
-            {TOUR_STEPS.map((_, idx) => (
+        <h3 className="spotlight-card-title">{step.title}</h3>
+        <p className="spotlight-card-desc">{step.description}</p>
+
+        <div className="spotlight-card-tip">
+          <Sparkles size={14} color={step.color} />
+          <span>{step.tip}</span>
+        </div>
+
+        {/* PIE DE NAVEGACIÓN */}
+        <div className="spotlight-card-footer">
+          <div className="spotlight-dots">
+            {SPOTLIGHT_STEPS.map((_, idx) => (
               <button
                 key={idx}
                 type="button"
-                className={`tour-dot ${idx === currentStep ? 'is-active' : ''}`}
+                className={`spotlight-dot ${idx === currentStep ? 'is-active' : ''}`}
+                style={idx === currentStep ? { background: step.color } : {}}
                 onClick={() => {
                   window.speechSynthesis?.cancel()
                   setIsSpeaking(false)
                   setCurrentStep(idx)
                 }}
                 aria-label={`Ir al paso ${idx + 1}`}
-                style={idx === currentStep ? { background: step.color } : {}}
               />
             ))}
           </div>
 
-          <div className="tour-nav-buttons">
+          <div className="spotlight-nav-actions">
             {currentStep > 0 && (
               <button
                 type="button"
-                className="secondary-button tour-btn-prev"
+                className="secondary-button spotlight-btn-prev"
                 onClick={handlePrev}
               >
-                <ArrowLeft size={16} />
-                <span>Anterior</span>
+                <ArrowLeft size={14} /> Anterior
               </button>
             )}
-
             <button
               type="button"
-              className="primary-button tour-btn-next"
+              className="primary-button spotlight-btn-next"
               onClick={handleNext}
               style={{ background: step.color }}
             >
-              <span>{currentStep === TOUR_STEPS.length - 1 ? '¡Listo, explorar mi barrio!' : 'Siguiente'}</span>
-              <ArrowRight size={16} />
+              <span>{currentStep === SPOTLIGHT_STEPS.length - 1 ? '¡Listo!' : 'Siguiente'}</span>
+              <ArrowRight size={14} />
             </button>
           </div>
         </div>
@@ -335,4 +502,3 @@ export function InAppTourModal({
     </div>
   )
 }
-
